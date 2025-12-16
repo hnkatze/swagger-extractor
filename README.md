@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Swagger Extractor
+
+A web-based tool to extract and export sections from Swagger/OpenAPI JSON files. Select specific API tags and export endpoints with their schemas in JSON or TOON format (optimized for LLM prompts).
+
+## Features
+
+- **File Upload**: Drag & drop or click to upload Swagger/OpenAPI JSON files
+- **Tag Selection**: Interactive table to select specific API tags
+- **Endpoint Preview**: View selected endpoints with methods, paths, and descriptions
+- **Multiple Export Formats**:
+  - **JSON**: Standard JSON output with resolved schemas
+  - **TOON**: Text-optimized format for LLM context (reduced token usage)
+- **Dark Mode**: System-aware theme with manual toggle
+- **Schema Resolution**: Automatically resolves `$ref` references
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS 4
+- **UI Components**: shadcn/ui
+- **Theme**: next-themes
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- npm, yarn, or pnpm
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/hnKatze/swagger-extractor.git
+cd swagger-extractor
+
+# Install dependencies
+npm install
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Available Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev      # Start development server
+npm run build    # Build for production
+npm run start    # Start production server
+npm run lint     # Run ESLint
+```
 
-## Learn More
+## Usage
 
-To learn more about Next.js, take a look at the following resources:
+1. **Upload** your Swagger/OpenAPI JSON file
+2. **Select** the API tags you want to extract
+3. **Preview** the endpoints that will be included
+4. **Export** in your preferred format (JSON or TOON)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Python CLI Tool
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+A standalone Python CLI tool is also available for command-line usage:
 
-## Deploy on Vercel
+```bash
+python swagger_extractor.py <swagger-file> [output-file]
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Dependencies**: `rich`, `InquirerPy`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project Structure
+
+```
+├── app/                    # Next.js App Router
+│   ├── layout.tsx          # Root layout with providers
+│   ├── page.tsx            # Home page
+│   └── globals.css         # Global styles & CSS variables
+├── components/
+│   ├── swagger-extractor/  # Main feature components
+│   ├── providers/          # Context providers
+│   ├── ui/                 # shadcn/ui components
+│   └── mode-toggle.tsx     # Theme toggle
+├── lib/
+│   ├── swagger/            # Swagger parsing utilities
+│   ├── formatters/         # Output formatters
+│   └── types/              # TypeScript types
+└── swagger_extractor.py    # Python CLI tool
+```
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
