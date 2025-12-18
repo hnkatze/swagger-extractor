@@ -81,7 +81,7 @@ export function SwaggerExtractor() {
 
         {/* Right column - Preview and Export */}
         <div className="space-y-6">
-          <EndpointsPreview tagsInfo={tagsInfo} selectedTags={selectedTags} />
+          <EndpointsPreview tagsInfo={tagsInfo} selectedTags={selectedTags} swagger={swagger} />
           <ExportPanel result={extractionResult} />
         </div>
       </div>

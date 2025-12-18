@@ -134,7 +134,7 @@ export function FileUpload({ onFileLoaded, onError }: FileUploadProps) {
           placeholder='Paste your swagger.json content here...&#10;&#10;{&#10;  "openapi": "3.0.0",&#10;  "info": { ... },&#10;  "paths": { ... }&#10;}'
           value={jsonText}
           onChange={(e) => setJsonText(e.target.value)}
-          className="min-h-[250px] font-mono text-sm"
+          className="h-[300px] resize-none font-mono text-sm"
         />
         <Button onClick={handlePasteSubmit} className="w-full gap-2">
           <FileJson className="h-4 w-4" />
