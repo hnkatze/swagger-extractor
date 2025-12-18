@@ -4,7 +4,7 @@ import type {
   EndpointInfo,
   OperationObject,
 } from "@/lib/types/swagger";
-import { getSchemaRef, extractParams, extractRequestBody, extractResponse } from "./schema-resolver";
+import { extractParams, extractRequestBodyWithType, extractResponse } from "./schema-resolver";
 
 const HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
 
@@ -52,9 +52,12 @@ export function analyzeTags(swagger: SwaggerDocument): Map<string, TagInfo> {
           endpoint.params = params;
         }
 
-        const body = extractRequestBody(operation);
-        if (body) {
-          endpoint.body = body;
+        const bodyInfo = extractRequestBodyWithType(operation);
+        if (bodyInfo.schema) {
+          endpoint.body = bodyInfo.schema;
+        }
+        if (bodyInfo.contentType) {
+          endpoint.bodyContentType = bodyInfo.contentType;
         }
 
         const response = extractResponse(operation);

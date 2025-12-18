@@ -97,7 +97,7 @@ export function FileUpload({ onFileLoaded, onError }: FileUploadProps) {
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="upload" className="mt-4">
+      <TabsContent value="upload" className="mt-4 space-y-4">
         <div
           onDrop={handleDrop}
           onDragOver={handleDragOver}
@@ -126,6 +126,12 @@ export function FileUpload({ onFileLoaded, onError }: FileUploadProps) {
             onChange={handleInputChange}
             className="absolute inset-0 cursor-pointer opacity-0"
           />
+        </div>
+
+        {/* Supported formats info */}
+        <div className="text-xs text-muted-foreground text-center space-y-1">
+          <p className="font-medium">Supported formats:</p>
+          <p>OpenAPI 3.x • Swagger 2.0 • JSON only</p>
         </div>
       </TabsContent>
 

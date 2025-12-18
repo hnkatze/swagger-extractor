@@ -1,4 +1,4 @@
-import type { SwaggerDocument } from "@/lib/types/swagger";
+import type { SwaggerDocument, Server, SecurityScheme } from "@/lib/types/swagger";
 
 export interface ParseResult {
   success: boolean;
@@ -60,4 +60,47 @@ export function getSchemaRefPrefix(swagger: SwaggerDocument): string {
     return "#/components/schemas/";
   }
   return "#/definitions/";
+}
+
+/**
+ * Get servers/base URLs from swagger document
+ * Handles both OpenAPI 3.x (servers array) and Swagger 2.0 (host/basePath)
+ */
+export function getServers(swagger: SwaggerDocument): Server[] {
+  // OpenAPI 3.x: use servers array directly
+  if (swagger.servers?.length) {
+    return swagger.servers;
+  }
+
+  // Swagger 2.0: construct URL from host + basePath
+  if (swagger.host) {
+    const scheme = swagger.schemes?.[0] || "https";
+    const basePath = swagger.basePath || "";
+    return [
+      {
+        url: `${scheme}://${swagger.host}${basePath}`,
+        description: "Default server",
+      },
+    ];
+  }
+
+  return [];
+}
+
+/**
+ * Get security schemes from swagger document
+ * Handles both OpenAPI 3.x and Swagger 2.0
+ */
+export function getSecuritySchemes(
+  swagger: SwaggerDocument
+): Record<string, SecurityScheme> {
+  // OpenAPI 3.x uses components.securitySchemes
+  if (swagger.components?.securitySchemes) {
+    return swagger.components.securitySchemes;
+  }
+  // Swagger 2.0 uses securityDefinitions
+  if (swagger.securityDefinitions) {
+    return swagger.securityDefinitions;
+  }
+  return {};
 }

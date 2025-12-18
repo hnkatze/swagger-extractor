@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ArrowRightLeft, ArrowRight, Eye } from "lucide-react";
+import { ChevronDown, ArrowRightLeft, ArrowRight, Eye, Play } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,11 +21,14 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { getSchemas } from "@/lib/swagger/parser";
 import { simplifySchema } from "@/lib/swagger/schema-simplifier";
+import { ApiTester } from "@/components/api-tester/api-tester";
+import type { ApiConfigState } from "@/components/api-tester/api-config";
 
 interface EndpointsPreviewProps {
   tagsInfo: Map<string, TagInfo>;
   selectedTags: Set<string>;
   swagger?: SwaggerDocument | null;
+  apiConfig?: ApiConfigState;
 }
 
 const METHOD_COLORS: Record<string, string> = {
@@ -61,16 +64,24 @@ export function EndpointsPreview({
   tagsInfo,
   selectedTags,
   swagger,
+  apiConfig,
 }: EndpointsPreviewProps) {
   const [openTags, setOpenTags] = useState<Set<string>>(new Set(selectedTags));
   const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointInfo | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [testerEndpoint, setTesterEndpoint] = useState<EndpointInfo | null>(null);
+  const [testerOpen, setTesterOpen] = useState(false);
 
   const allSchemas = swagger ? getSchemas(swagger) : {};
 
   const openEndpointDetail = (endpoint: EndpointInfo) => {
     setSelectedEndpoint(endpoint);
     setDialogOpen(true);
+  };
+
+  const openApiTester = (endpoint: EndpointInfo) => {
+    setTesterEndpoint(endpoint);
+    setTesterOpen(true);
   };
 
   const toggleTag = (tagName: string) => {
@@ -165,12 +176,25 @@ export function EndpointsPreview({
                               variant="ghost"
                               size="sm"
                               className="h-5 w-5 p-0 shrink-0"
+                              title="View details"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openEndpointDetail(endpoint);
                               }}
                             >
                               <Eye className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 w-5 p-0 shrink-0 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+                              title="Test endpoint"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openApiTester(endpoint);
+                              }}
+                            >
+                              <Play className="h-3.5 w-3.5" />
                             </Button>
                           </div>
 
@@ -362,6 +386,14 @@ export function EndpointsPreview({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* API Tester Modal */}
+      <ApiTester
+        endpoint={testerEndpoint}
+        config={apiConfig ?? { baseUrl: "", auth: { type: "none" } }}
+        open={testerOpen}
+        onOpenChange={setTesterOpen}
+      />
     </Card>
   );
 }

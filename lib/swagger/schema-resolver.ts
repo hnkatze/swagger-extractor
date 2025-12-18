@@ -75,28 +75,59 @@ export function extractParams(operation: OperationObject): string[] {
   return params;
 }
 
+export interface RequestBodyInfo {
+  schema: string | null;
+  contentType: string | null;
+}
+
 /**
- * Extract the request body schema reference
+ * Extract the request body schema reference and content type
  * Ported from Python: extract_request_body()
  */
 export function extractRequestBody(operation: OperationObject): string | null {
-  const requestBody = operation.requestBody;
-  if (!requestBody?.content) return null;
+  return extractRequestBodyWithType(operation).schema;
+}
 
-  const contentTypes = [
+/**
+ * Extract full request body info including content type
+ * Used for detecting file uploads (multipart/form-data, application/octet-stream)
+ */
+export function extractRequestBodyWithType(operation: OperationObject): RequestBodyInfo {
+  const requestBody = operation.requestBody;
+  if (!requestBody?.content) return { schema: null, contentType: null };
+
+  // Priority order - check what content types are available
+  const contentTypePriority = [
     "application/json",
-    "application/x-www-form-urlencoded",
     "multipart/form-data",
+    "application/x-www-form-urlencoded",
+    "application/octet-stream",
+    "*/*",
   ];
 
-  for (const contentType of contentTypes) {
+  // First, try to find by priority
+  for (const contentType of contentTypePriority) {
     const content = requestBody.content[contentType];
-    if (content?.schema) {
-      return getSchemaRef(content.schema);
+    if (content) {
+      return {
+        schema: content.schema ? getSchemaRef(content.schema) : null,
+        contentType,
+      };
     }
   }
 
-  return null;
+  // If none found in priority, take the first available
+  const availableTypes = Object.keys(requestBody.content);
+  if (availableTypes.length > 0) {
+    const contentType = availableTypes[0];
+    const content = requestBody.content[contentType];
+    return {
+      schema: content?.schema ? getSchemaRef(content.schema) : null,
+      contentType,
+    };
+  }
+
+  return { schema: null, contentType: null };
 }
 
 /**

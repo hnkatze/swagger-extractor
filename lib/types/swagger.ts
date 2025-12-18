@@ -57,15 +57,38 @@ export interface PathItem {
   trace?: OperationObject;
 }
 
+// Server definition (OpenAPI 3.x)
+export interface Server {
+  url: string;
+  description?: string;
+}
+
+// Security scheme definition
+export interface SecurityScheme {
+  type: "http" | "apiKey" | "oauth2" | "openIdConnect";
+  scheme?: string; // "bearer", "basic" for type: http
+  name?: string; // header/query param name for apiKey
+  in?: "header" | "query" | "cookie"; // location for apiKey
+  bearerFormat?: string;
+}
+
 export interface SwaggerDocument {
   openapi?: string;
   swagger?: string;
   info: SwaggerInfo;
   paths: Record<string, PathItem>;
+  // OpenAPI 3.x
+  servers?: Server[];
   components?: {
     schemas?: Record<string, SchemaObject>;
+    securitySchemes?: Record<string, SecurityScheme>;
   };
-  definitions?: Record<string, SchemaObject>; // Swagger 2.0
+  // Swagger 2.0
+  definitions?: Record<string, SchemaObject>;
+  host?: string;
+  basePath?: string;
+  schemes?: string[];
+  securityDefinitions?: Record<string, SecurityScheme>;
 }
 
 // Application types
@@ -76,6 +99,7 @@ export interface EndpointInfo {
   summary?: string;
   params?: string[];
   body?: string;
+  bodyContentType?: string; // e.g., "application/json", "multipart/form-data", "application/octet-stream"
   response?: string;
 }
 
