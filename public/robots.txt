@@ -1,0 +1,8 @@
+# Robots.txt for Swagger Extractor
+# https://swaggerextractor.camilohenriquez.com
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://swaggerextractor.camilohenriquez.com/sitemap.xml
