@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
-import { Play, Loader2, Clock, AlertCircle, Settings, Upload, X, FileIcon } from "lucide-react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { Play, Loader2, Clock, AlertCircle, Settings, Upload, X, FileIcon, Copy, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,6 +80,16 @@ export function ApiTester({
   const expectsFileUpload = useMemo(() => {
     return isFileUpload(endpoint?.bodyContentType);
   }, [endpoint?.bodyContentType]);
+
+  // Pre-populate request body with example when dialog opens
+  useEffect(() => {
+    if (open && endpoint?.bodyExample && !expectsFileUpload) {
+      const exampleStr = typeof endpoint.bodyExample === "string"
+        ? endpoint.bodyExample
+        : JSON.stringify(endpoint.bodyExample, null, 2);
+      setRequestBody(exampleStr);
+    }
+  }, [open, endpoint?.bodyExample, expectsFileUpload]);
 
   // Get path parameter names
   const pathParamNames = useMemo(() => {
@@ -326,7 +336,7 @@ export function ApiTester({
                   </div>
                 ) : (
                   <Textarea
-                    placeholder='{ "key": "value" }'
+                    placeholder={endpoint.bodyExample ? "Example loaded from spec" : '{ "key": "value" }'}
                     value={requestBody}
                     onChange={(e) => setRequestBody(e.target.value)}
                     className="h-[100px] font-mono text-sm resize-none"
@@ -395,10 +405,21 @@ function ResponseDisplay({
   headersOpen: boolean;
   setHeadersOpen: (open: boolean) => void;
 }) {
+  const [copied, setCopied] = useState(false);
   const formattedBody = formatResponseBody(
     response.body,
     response.headers["content-type"]
   );
+
+  const copyResponse = async () => {
+    try {
+      await navigator.clipboard.writeText(formattedBody || response.body);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Silent fail
+    }
+  };
 
   return (
     <div className="space-y-2">
@@ -414,6 +435,24 @@ function ResponseDisplay({
           <Clock className="h-3 w-3" />
           {response.duration}ms
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 ml-auto gap-1"
+          onClick={copyResponse}
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3" />
+              <span className="text-xs">Copied</span>
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3" />
+              <span className="text-xs">Copy</span>
+            </>
+          )}
+        </Button>
       </div>
 
       {/* Headers (collapsible) */}

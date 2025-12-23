@@ -24,10 +24,17 @@ export interface SchemaObject {
   allOf?: SchemaObject[];
   oneOf?: SchemaObject[];
   anyOf?: SchemaObject[];
+  example?: unknown;
+}
+
+export interface MediaTypeObject {
+  schema?: SchemaObject;
+  example?: unknown;
+  examples?: Record<string, { value: unknown; summary?: string; description?: string }>;
 }
 
 export interface RequestBody {
-  content?: Record<string, { schema?: SchemaObject }>;
+  content?: Record<string, MediaTypeObject>;
   required?: boolean;
 }
 
@@ -100,6 +107,7 @@ export interface EndpointInfo {
   params?: string[];
   body?: string;
   bodyContentType?: string; // e.g., "application/json", "multipart/form-data", "application/octet-stream"
+  bodyExample?: unknown; // Example value for the request body
   response?: string;
 }
 

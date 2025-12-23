@@ -59,6 +59,9 @@ export function analyzeTags(swagger: SwaggerDocument): Map<string, TagInfo> {
         if (bodyInfo.contentType) {
           endpoint.bodyContentType = bodyInfo.contentType;
         }
+        if (bodyInfo.example !== null) {
+          endpoint.bodyExample = bodyInfo.example;
+        }
 
         const response = extractResponse(operation);
         if (response) {

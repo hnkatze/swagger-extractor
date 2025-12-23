@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDown, ArrowRightLeft, ArrowRight, Eye, Play } from "lucide-react";
+import { ChevronDown, ArrowRightLeft, ArrowRight, Eye, Play, Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,8 +72,71 @@ export function EndpointsPreview({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [testerEndpoint, setTesterEndpoint] = useState<EndpointInfo | null>(null);
   const [testerOpen, setTesterOpen] = useState(false);
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const [copiedResponse, setCopiedResponse] = useState(false);
 
   const allSchemas = swagger ? getSchemas(swagger) : {};
+
+  // Copy endpoint path (e.g., "GET /api/users/{id}")
+  const copyEndpointPath = async (endpoint: EndpointInfo) => {
+    const text = `${endpoint.method} ${endpoint.path}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedPath(`${endpoint.method}-${endpoint.path}`);
+      toast.success("Path copied!");
+      setTimeout(() => setCopiedPath(null), 2000);
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
+
+  // Copy full endpoint JSON (for documentation)
+  const copyEndpointJson = async (endpoint: EndpointInfo) => {
+    const bodyFields = endpoint.body ? getSchemaFields(endpoint.body, allSchemas) : null;
+    const responseFields = endpoint.response ? getSchemaFields(endpoint.response, allSchemas) : null;
+
+    const json = {
+      method: endpoint.method,
+      path: endpoint.path,
+      summary: endpoint.summary || undefined,
+      parameters: endpoint.params?.map(p => parseParam(p)) || undefined,
+      requestBody: bodyFields ? { schema: endpoint.body, fields: bodyFields } : undefined,
+      response: responseFields ? { schema: endpoint.response, fields: responseFields } : undefined,
+    };
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+      setCopiedJson(true);
+      toast.success("JSON copied!");
+      setTimeout(() => setCopiedJson(false), 2000);
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
+
+  // Copy response schema as JSON
+  const copyResponseSchema = async (endpoint: EndpointInfo) => {
+    const responseFields = endpoint.response ? getSchemaFields(endpoint.response, allSchemas) : null;
+    if (!responseFields) {
+      toast.error("No response schema available");
+      return;
+    }
+
+    const json = {
+      schema: endpoint.response,
+      fields: responseFields,
+    };
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+      setCopiedResponse(true);
+      toast.success("Response copied!");
+      setTimeout(() => setCopiedResponse(false), 2000);
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
 
   const openEndpointDetail = (endpoint: EndpointInfo) => {
     setSelectedEndpoint(endpoint);
@@ -176,6 +240,22 @@ export function EndpointsPreview({
                               variant="ghost"
                               size="sm"
                               className="h-5 w-5 p-0 shrink-0"
+                              title="Copy path"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyEndpointPath(endpoint);
+                              }}
+                            >
+                              {copiedPath === `${endpoint.method}-${endpoint.path}` ? (
+                                <Check className="h-3.5 w-3.5 text-emerald-500" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 w-5 p-0 shrink-0"
                               title="View details"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -254,9 +334,27 @@ export function EndpointsPreview({
                   >
                     {selectedEndpoint.method}
                   </Badge>
-                  <code className="font-mono text-sm break-all">
+                  <code className="font-mono text-sm break-all flex-1">
                     {selectedEndpoint.path}
                   </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 ml-auto"
+                    onClick={() => copyEndpointJson(selectedEndpoint)}
+                  >
+                    {copiedJson ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5" />
+                        Copy JSON
+                      </>
+                    )}
+                  </Button>
                 </>
               )}
             </DialogTitle>
@@ -345,6 +443,24 @@ export function EndpointsPreview({
                   </div>
                 )}
 
+                {/* Body Example */}
+                {selectedEndpoint.bodyExample !== undefined && selectedEndpoint.bodyExample !== null ? (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                      <ArrowRightLeft className="h-4 w-4 text-amber-500" />
+                      Example
+                      <Badge variant="outline" className="text-xs text-amber-600 dark:text-amber-400">
+                        JSON
+                      </Badge>
+                    </h4>
+                    <div className="rounded-md border bg-muted/30 p-3">
+                      <pre className="text-xs font-mono whitespace-pre-wrap break-all">
+                        {JSON.stringify(selectedEndpoint.bodyExample, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                ) : null}
+
                 {/* Response */}
                 {selectedEndpoint.response && (
                   <div>
@@ -354,6 +470,24 @@ export function EndpointsPreview({
                       <Badge variant="outline" className="text-xs text-emerald-600 dark:text-emerald-400">
                         {selectedEndpoint.response}
                       </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 ml-auto"
+                        onClick={() => copyResponseSchema(selectedEndpoint)}
+                      >
+                        {copiedResponse ? (
+                          <>
+                            <Check className="h-3 w-3 mr-1" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3 mr-1" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
                     </h4>
                     {(() => {
                       const fields = getSchemaFields(selectedEndpoint.response, allSchemas);

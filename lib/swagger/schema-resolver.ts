@@ -78,6 +78,7 @@ export function extractParams(operation: OperationObject): string[] {
 export interface RequestBodyInfo {
   schema: string | null;
   contentType: string | null;
+  example: unknown | null;
 }
 
 /**
@@ -89,12 +90,40 @@ export function extractRequestBody(operation: OperationObject): string | null {
 }
 
 /**
- * Extract full request body info including content type
+ * Extract example from media type object
+ * Checks: 1) example field, 2) examples field (first one), 3) schema.example
+ */
+function extractExample(content: { schema?: SchemaObject; example?: unknown; examples?: Record<string, { value: unknown }> } | undefined): unknown | null {
+  if (!content) return null;
+
+  // 1. Direct example field
+  if (content.example !== undefined) {
+    return content.example;
+  }
+
+  // 2. Examples field (take the first one)
+  if (content.examples) {
+    const firstExampleKey = Object.keys(content.examples)[0];
+    if (firstExampleKey && content.examples[firstExampleKey]?.value !== undefined) {
+      return content.examples[firstExampleKey].value;
+    }
+  }
+
+  // 3. Schema example
+  if (content.schema?.example !== undefined) {
+    return content.schema.example;
+  }
+
+  return null;
+}
+
+/**
+ * Extract full request body info including content type and example
  * Used for detecting file uploads (multipart/form-data, application/octet-stream)
  */
 export function extractRequestBodyWithType(operation: OperationObject): RequestBodyInfo {
   const requestBody = operation.requestBody;
-  if (!requestBody?.content) return { schema: null, contentType: null };
+  if (!requestBody?.content) return { schema: null, contentType: null, example: null };
 
   // Priority order - check what content types are available
   const contentTypePriority = [
@@ -112,6 +141,7 @@ export function extractRequestBodyWithType(operation: OperationObject): RequestB
       return {
         schema: content.schema ? getSchemaRef(content.schema) : null,
         contentType,
+        example: extractExample(content),
       };
     }
   }
@@ -124,10 +154,11 @@ export function extractRequestBodyWithType(operation: OperationObject): RequestB
     return {
       schema: content?.schema ? getSchemaRef(content.schema) : null,
       contentType,
+      example: extractExample(content),
     };
   }
 
-  return { schema: null, contentType: null };
+  return { schema: null, contentType: null, example: null };
 }
 
 /**

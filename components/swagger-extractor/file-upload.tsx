@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Upload, FileJson, ClipboardPaste } from "lucide-react";
+import { Upload, FileJson, ClipboardPaste, Link, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseSwagger } from "@/lib/swagger/parser";
 import type { SwaggerDocument } from "@/lib/types/swagger";
+import type { SwaggerProxyResponse } from "@/app/api/proxy/swagger/route";
 
 interface FileUploadProps {
   onFileLoaded: (swagger: SwaggerDocument, filename: string) => void;
@@ -17,6 +19,8 @@ interface FileUploadProps {
 export function FileUpload({ onFileLoaded, onError }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [jsonText, setJsonText] = useState("");
+  const [urlInput, setUrlInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const processContent = useCallback(
     (content: string, filename: string) => {
@@ -84,16 +88,59 @@ export function FileUpload({ onFileLoaded, onError }: FileUploadProps) {
     processContent(jsonText, "pasted-swagger.json");
   }, [jsonText, onError, processContent]);
 
+  const handleUrlFetch = useCallback(async () => {
+    if (!urlInput.trim()) {
+      onError("Please enter a URL");
+      return;
+    }
+
+    // Basic URL validation
+    try {
+      new URL(urlInput);
+    } catch {
+      onError("Please enter a valid URL");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/proxy/swagger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlInput }),
+      });
+
+      const result = (await response.json()) as SwaggerProxyResponse;
+
+      if (result.success && result.data) {
+        // Parse the fetched swagger
+        const jsonString = JSON.stringify(result.data);
+        const filename = urlInput.split("/").pop() || "swagger.json";
+        processContent(jsonString, filename);
+      } else {
+        onError(result.error || "Failed to fetch swagger spec");
+      }
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Failed to fetch swagger spec");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [urlInput, onError, processContent]);
+
   return (
     <Tabs defaultValue="upload" className="w-full">
-      <TabsList className="grid w-full grid-cols-2">
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="upload" className="gap-2">
           <Upload className="h-4 w-4" />
-          Upload File
+          <span className="hidden sm:inline">Upload</span>
         </TabsTrigger>
         <TabsTrigger value="paste" className="gap-2">
           <ClipboardPaste className="h-4 w-4" />
-          Paste JSON
+          <span className="hidden sm:inline">Paste</span>
+        </TabsTrigger>
+        <TabsTrigger value="url" className="gap-2">
+          <Link className="h-4 w-4" />
+          <span className="hidden sm:inline">URL</span>
         </TabsTrigger>
       </TabsList>
 
@@ -146,6 +193,70 @@ export function FileUpload({ onFileLoaded, onError }: FileUploadProps) {
           <FileJson className="h-4 w-4" />
           Parse Swagger
         </Button>
+      </TabsContent>
+
+      <TabsContent value="url" className="mt-4 space-y-4">
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Input
+              type="url"
+              placeholder="https://api.example.com/swagger.json"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !isLoading && handleUrlFetch()}
+              className="font-mono text-sm"
+              disabled={isLoading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter a direct URL to a swagger.json or openapi.json file
+            </p>
+          </div>
+
+          <Button
+            onClick={handleUrlFetch}
+            disabled={isLoading || !urlInput.trim()}
+            className="w-full gap-2"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Fetching...
+              </>
+            ) : (
+              <>
+                <Link className="h-4 w-4" />
+                Fetch Swagger
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* URL examples */}
+        <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Example URLs:</p>
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => setUrlInput("https://petstore.swagger.io/v2/swagger.json")}
+              className="text-xs text-blue-600 dark:text-blue-400 hover:underline block text-left"
+            >
+              Petstore API (Swagger 2.0)
+            </button>
+            <button
+              type="button"
+              onClick={() => setUrlInput("https://petstore3.swagger.io/api/v3/openapi.json")}
+              className="text-xs text-blue-600 dark:text-blue-400 hover:underline block text-left"
+            >
+              Petstore API (OpenAPI 3.0)
+            </button>
+          </div>
+        </div>
+
+        {/* Note about CORS */}
+        <div className="text-xs text-muted-foreground text-center space-y-1">
+          <p className="font-medium">Works with:</p>
+          <p>Public APIs • localhost URLs • CORS-enabled endpoints</p>
+        </div>
       </TabsContent>
     </Tabs>
   );
