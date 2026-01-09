@@ -37,12 +37,14 @@ export function toToon(data: ExtractionResult): string {
     if (endpoints.length === 0) continue;
 
     // Determine which fields are present in this tag's endpoints
+    const hasDesc = endpoints.some((e) => e.description);
     const hasParams = endpoints.some((e) => e.params?.length);
     const hasBody = endpoints.some((e) => e.body);
     const hasResponse = endpoints.some((e) => e.response);
 
     // Build fields list - always include path, method, summary
     const fields = ["path", "method", "summary"];
+    if (hasDesc) fields.push("desc");
     if (hasParams) fields.push("params");
     if (hasBody) fields.push("body");
     if (hasResponse) fields.push("response");
@@ -58,6 +60,9 @@ export function toToon(data: ExtractionResult): string {
         escapeValue(ep.summary || ""),
       ];
 
+      if (hasDesc) {
+        values.push(escapeValue(ep.description || ""));
+      }
       if (hasParams) {
         values.push(ep.params?.join(";") || "");
       }

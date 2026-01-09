@@ -104,6 +104,7 @@ export interface EndpointInfo {
   path: string;
   method: string;
   summary?: string;
+  description?: string; // Detailed description of the endpoint
   params?: string[];
   body?: string;
   bodyContentType?: string; // e.g., "application/json", "multipart/form-data", "application/octet-stream"

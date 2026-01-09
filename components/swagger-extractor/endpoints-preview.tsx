@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ArrowRightLeft, ArrowRight, Eye, Play, Copy, Check } from "lucide-react";
+import { ChevronDown, ArrowRightLeft, ArrowRight, Eye, Play, Copy, Check, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { TagInfo, EndpointInfo, SwaggerDocument } from "@/lib/types/swagger";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { getSchemas } from "@/lib/swagger/parser";
 import { simplifySchema } from "@/lib/swagger/schema-simplifier";
 import { ApiTester } from "@/components/api-tester/api-tester";
@@ -75,8 +76,48 @@ export function EndpointsPreview({
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [copiedJson, setCopiedJson] = useState(false);
   const [copiedResponse, setCopiedResponse] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const allSchemas = swagger ? getSchemas(swagger) : {};
+
+  // Filter endpoints by search query
+  const filterEndpoints = useMemo(() => {
+    return (endpoints: EndpointInfo[]) => {
+      if (!searchQuery.trim()) return endpoints;
+      const query = searchQuery.toLowerCase();
+      return endpoints.filter(
+        (ep) =>
+          ep.path.toLowerCase().includes(query) ||
+          ep.method.toLowerCase().includes(query) ||
+          ep.summary?.toLowerCase().includes(query) ||
+          ep.description?.toLowerCase().includes(query)
+      );
+    };
+  }, [searchQuery]);
+
+  // Count total filtered endpoints
+  const totalFilteredEndpoints = useMemo(() => {
+    let count = 0;
+    selectedTags.forEach((tag) => {
+      const tagInfo = tagsInfo.get(tag);
+      if (tagInfo) {
+        count += filterEndpoints(tagInfo.paths).length;
+      }
+    });
+    return count;
+  }, [selectedTags, tagsInfo, filterEndpoints]);
+
+  // Count total endpoints
+  const totalEndpoints = useMemo(() => {
+    let count = 0;
+    selectedTags.forEach((tag) => {
+      const tagInfo = tagsInfo.get(tag);
+      if (tagInfo) {
+        count += tagInfo.paths.length;
+      }
+    });
+    return count;
+  }, [selectedTags, tagsInfo]);
 
   // Copy endpoint path (e.g., "GET /api/users/{id}")
   const copyEndpointPath = async (endpoint: EndpointInfo) => {
@@ -174,18 +215,38 @@ export function EndpointsPreview({
   }
 
   const selectedTagsArray = Array.from(selectedTags).sort();
-  const totalEndpoints = selectedTagsArray.reduce((sum, tagName) => {
-    const tag = tagsInfo.get(tagName);
-    return sum + (tag?.total || 0);
-  }, 0);
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center justify-between">
           <span>Endpoints Preview</span>
-          <Badge variant="secondary">{totalEndpoints} endpoints</Badge>
+          <Badge variant="secondary">
+            {searchQuery.trim()
+              ? `${totalFilteredEndpoints} of ${totalEndpoints}`
+              : totalEndpoints}{" "}
+            endpoints
+          </Badge>
         </CardTitle>
+        {/* Search input */}
+        <div className="relative mt-2">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search endpoints..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-[350px]">
@@ -193,6 +254,9 @@ export function EndpointsPreview({
             {selectedTagsArray.map((tagName) => {
               const tag = tagsInfo.get(tagName);
               if (!tag) return null;
+
+              const filteredPaths = filterEndpoints(tag.paths);
+              if (filteredPaths.length === 0 && searchQuery.trim()) return null;
 
               const isOpen = openTags.has(tagName);
 
@@ -206,7 +270,9 @@ export function EndpointsPreview({
                     <span className="flex items-center gap-2">
                       {tagName}
                       <Badge variant="outline" className="ml-1">
-                        {tag.total}
+                        {searchQuery.trim()
+                          ? `${filteredPaths.length}/${tag.total}`
+                          : tag.total}
                       </Badge>
                     </span>
                     <ChevronDown
@@ -218,7 +284,7 @@ export function EndpointsPreview({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="mt-2 space-y-1 pl-2">
-                      {tag.paths.map((endpoint, idx) => (
+                      {filteredPaths.map((endpoint, idx) => (
                         <div
                           key={`${endpoint.method}-${endpoint.path}-${idx}`}
                           className="rounded-md border bg-card p-2.5 text-sm space-y-1.5"
@@ -369,6 +435,16 @@ export function EndpointsPreview({
                     <h4 className="text-sm font-medium mb-1">Summary</h4>
                     <p className="text-sm text-muted-foreground">
                       {selectedEndpoint.summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Description */}
+                {selectedEndpoint.description && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-1">Description</h4>
+                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+                      {selectedEndpoint.description}
                     </p>
                   </div>
                 )}

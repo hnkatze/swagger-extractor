@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { Upload, FileJson, ClipboardPaste, Link, Loader2 } from "lucide-react";
+import { useCallback, useState, useEffect } from "react";
+import { Upload, FileJson, ClipboardPaste, Link, Loader2, X, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,11 +16,53 @@ interface FileUploadProps {
   onError: (error: string) => void;
 }
 
+const STORAGE_KEY = "swagger-extractor:recent-urls";
+const MAX_RECENT_URLS = 5;
+
 export function FileUpload({ onFileLoaded, onError }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [urlInput, setUrlInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [recentUrls, setRecentUrls] = useState<string[]>([]);
+
+  // Load recent URLs from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        setRecentUrls(JSON.parse(stored));
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
+
+  // Save URL to recent list
+  const saveRecentUrl = useCallback((url: string) => {
+    setRecentUrls((prev) => {
+      const updated = [url, ...prev.filter((u) => u !== url)].slice(0, MAX_RECENT_URLS);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch {
+        // Ignore localStorage errors
+      }
+      return updated;
+    });
+  }, []);
+
+  // Remove URL from recent list
+  const removeRecentUrl = useCallback((url: string) => {
+    setRecentUrls((prev) => {
+      const updated = prev.filter((u) => u !== url);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch {
+        // Ignore localStorage errors
+      }
+      return updated;
+    });
+  }, []);
 
   const processContent = useCallback(
     (content: string, filename: string) => {
@@ -113,6 +155,8 @@ export function FileUpload({ onFileLoaded, onError }: FileUploadProps) {
       const result = (await response.json()) as SwaggerProxyResponse;
 
       if (result.success && result.data) {
+        // Save to recent URLs on success
+        saveRecentUrl(urlInput);
         // Parse the fetched swagger
         const jsonString = JSON.stringify(result.data);
         const filename = urlInput.split("/").pop() || "swagger.json";
@@ -125,7 +169,7 @@ export function FileUpload({ onFileLoaded, onError }: FileUploadProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [urlInput, onError, processContent]);
+  }, [urlInput, onError, processContent, saveRecentUrl]);
 
   return (
     <Tabs defaultValue="upload" className="w-full">
@@ -230,6 +274,38 @@ export function FileUpload({ onFileLoaded, onError }: FileUploadProps) {
             )}
           </Button>
         </div>
+
+        {/* Recent URLs */}
+        {recentUrls.length > 0 && (
+          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Recent URLs:
+            </p>
+            <div className="space-y-1">
+              {recentUrls.map((url) => (
+                <div key={url} className="flex items-center gap-1 group">
+                  <button
+                    type="button"
+                    onClick={() => setUrlInput(url)}
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline text-left truncate flex-1"
+                    title={url}
+                  >
+                    {url.length > 50 ? `${url.slice(0, 50)}...` : url}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeRecentUrl(url)}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-muted rounded transition-opacity"
+                    title="Remove from history"
+                  >
+                    <X className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* URL examples */}
         <div className="rounded-md border bg-muted/30 p-3 space-y-2">

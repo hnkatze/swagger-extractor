@@ -47,6 +47,10 @@ export function analyzeTags(swagger: SwaggerDocument): Map<string, TagInfo> {
           endpoint.summary = operation.summary;
         }
 
+        if (operation.description) {
+          endpoint.description = operation.description;
+        }
+
         const params = extractParams(operation);
         if (params.length > 0) {
           endpoint.params = params;
