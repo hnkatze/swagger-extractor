@@ -62,6 +62,73 @@ function getSchemaFields(
   return simplifySchema(schema as Record<string, unknown>, allSchemas as Record<string, Record<string, unknown>>);
 }
 
+// Collapsible text component for long summary/description
+const MAX_CHARS = 200;
+
+function CollapsibleText({
+  summary,
+  description,
+}: {
+  summary?: string;
+  description?: string;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const totalLength = (summary?.length || 0) + (description?.length || 0);
+  const needsCollapse = totalLength > MAX_CHARS;
+
+  const content = (
+    <div className="space-y-2">
+      {summary && (
+        <div>
+          <h4 className="text-sm font-medium mb-1">Summary</h4>
+          <p className="text-sm text-muted-foreground">{summary}</p>
+        </div>
+      )}
+      {description && (
+        <div>
+          <h4 className="text-sm font-medium mb-1">Description</h4>
+          <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+            {description}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  if (!needsCollapse) {
+    return content;
+  }
+
+  return (
+    <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+      <div className="rounded-md border bg-muted/30 p-3">
+        {isExpanded ? (
+          content
+        ) : (
+          <p className="text-sm text-muted-foreground line-clamp-2">
+            {summary || description}
+          </p>
+        )}
+        <CollapsibleTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2 h-6 px-2 text-xs w-full"
+          >
+            <ChevronDown
+              className={cn(
+                "h-3 w-3 mr-1 transition-transform",
+                isExpanded && "rotate-180"
+              )}
+            />
+            {isExpanded ? "Show less" : "Show more"}
+          </Button>
+        </CollapsibleTrigger>
+      </div>
+    </Collapsible>
+  );
+}
+
 export function EndpointsPreview({
   tagsInfo,
   selectedTags,
@@ -141,8 +208,9 @@ export function EndpointsPreview({
       method: endpoint.method,
       path: endpoint.path,
       summary: endpoint.summary || undefined,
+      description: endpoint.description || undefined,
       parameters: endpoint.params?.map(p => parseParam(p)) || undefined,
-      requestBody: bodyFields ? { schema: endpoint.body, fields: bodyFields } : undefined,
+      requestBody: bodyFields ? { schema: endpoint.body, fields: bodyFields, example: endpoint.bodyExample } : undefined,
       response: responseFields ? { schema: endpoint.response, fields: responseFields } : undefined,
     };
 
@@ -429,24 +497,12 @@ export function EndpointsPreview({
           {selectedEndpoint && (
             <ScrollArea className="flex-1 pr-4">
               <div className="space-y-4">
-                {/* Summary */}
-                {selectedEndpoint.summary && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-1">Summary</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedEndpoint.summary}
-                    </p>
-                  </div>
-                )}
-
-                {/* Description */}
-                {selectedEndpoint.description && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-1">Description</h4>
-                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">
-                      {selectedEndpoint.description}
-                    </p>
-                  </div>
+                {/* Summary & Description - Collapsible when long */}
+                {(selectedEndpoint.summary || selectedEndpoint.description) && (
+                  <CollapsibleText
+                    summary={selectedEndpoint.summary}
+                    description={selectedEndpoint.description}
+                  />
                 )}
 
                 {/* Parameters */}
