@@ -103,7 +103,9 @@ function CollapsibleText({
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
       <div className="rounded-md border bg-muted/30 p-3">
         {isExpanded ? (
-          content
+          <div className="max-h-[300px] overflow-auto pr-2">
+            {content}
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground line-clamp-2">
             {summary || description}
