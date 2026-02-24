@@ -7,5 +7,6 @@ export {
   extractRequestBody,
   extractResponse,
 } from "./schema-resolver";
-export { simplifySchema } from "./schema-simplifier";
+export { simplifySchema, resolveSchemaDeep } from "./schema-simplifier";
+export type { DeepSchemaField } from "./schema-simplifier";
 export { extractByTags } from "./extractor";

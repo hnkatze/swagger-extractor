@@ -8,6 +8,7 @@ export interface AuthConfig {
   token?: string; // For bearer
   apiKeyName?: string; // For API key (header name or query param name)
   apiKeyValue?: string; // For API key
+  autoAuth?: boolean; // Token was obtained via Auto Auth
 }
 
 /**

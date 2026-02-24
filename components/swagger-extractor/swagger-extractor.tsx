@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { RotateCcw, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,18 @@ import { ApiConfig, ApiConfigState } from "@/components/api-tester/api-config";
 import { analyzeTags } from "@/lib/swagger/analyzer";
 import { extractByTags } from "@/lib/swagger/extractor";
 import type { SwaggerDocument, TagInfo, ExtractionResult } from "@/lib/types/swagger";
+import {
+  type AutoAuthState,
+  type AutoAuthConfig,
+  INITIAL_AUTO_AUTH_STATE,
+  saveAutoAuthConfig,
+  loadAutoAuthConfig,
+  clearAutoAuthConfig,
+  executeAutoRefresh,
+  executeAutoLogin,
+} from "@/lib/api-testing/auto-auth";
+
+const REFRESH_INTERVAL_MS = 25 * 60 * 1000; // 25 minutes
 
 export function SwaggerExtractor() {
   const [swagger, setSwagger] = useState<SwaggerDocument | null>(null);
@@ -33,14 +45,123 @@ export function SwaggerExtractor() {
     auth: { type: "none" },
   });
 
+  // Auto Auth state
+  const [autoAuthState, setAutoAuthState] = useState<AutoAuthState>(INITIAL_AUTO_AUTH_STATE);
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Restore auto-auth config from localStorage on swagger load
+  useEffect(() => {
+    if (!swagger) return;
+    const saved = loadAutoAuthConfig(swagger.info.title, swagger.info.version || "1.0");
+    if (saved) {
+      setAutoAuthState((prev) => ({ ...prev, config: saved }));
+      toast.info("Previous auto-auth config found. Use Auto Auth to re-authenticate.");
+    }
+  }, [swagger]);
+
+  // Auto-refresh timer
+  useEffect(() => {
+    // Clean up previous interval
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+    }
+
+    if (
+      autoAuthState.status !== "authenticated" ||
+      !autoAuthState.config?.autoRefresh ||
+      !autoAuthState.config?.refreshEndpoint ||
+      !autoAuthState.refreshToken ||
+      !apiConfig.baseUrl
+    ) {
+      return;
+    }
+
+    refreshIntervalRef.current = setInterval(async () => {
+      if (!autoAuthState.config || !autoAuthState.refreshToken) return;
+
+      setAutoAuthState((prev) => ({ ...prev, status: "refreshing" }));
+
+      const result = await executeAutoRefresh(
+        apiConfig.baseUrl,
+        autoAuthState.config,
+        autoAuthState.refreshToken
+      );
+
+      if (result.ok) {
+        setAutoAuthState((prev) => ({
+          ...prev,
+          accessToken: result.data.accessToken,
+          refreshToken: result.data.refreshToken ?? prev.refreshToken,
+          obtainedAt: Date.now(),
+          status: "authenticated",
+        }));
+        setApiConfig((prev) => ({
+          ...prev,
+          auth: { ...prev.auth, token: result.data.accessToken, autoAuth: true },
+        }));
+        toast.success("Token auto-refreshed");
+      } else {
+        setAutoAuthState((prev) => ({
+          ...prev,
+          status: "error",
+          error: result.error,
+        }));
+        toast.error("Token refresh failed. Please re-authenticate.");
+      }
+    }, REFRESH_INTERVAL_MS);
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, [
+    autoAuthState.status,
+    autoAuthState.config?.autoRefresh,
+    autoAuthState.config?.refreshEndpoint,
+    autoAuthState.refreshToken,
+    apiConfig.baseUrl,
+  ]);
+
+  const handleAutoAuthComplete = useCallback(
+    (accessToken: string, refreshToken: string | undefined, config: AutoAuthConfig) => {
+      setAutoAuthState({
+        config,
+        accessToken,
+        refreshToken: refreshToken ?? null,
+        obtainedAt: Date.now(),
+        status: "authenticated",
+      });
+      setApiConfig((prev) => ({
+        ...prev,
+        auth: { type: "bearer", token: accessToken, autoAuth: true },
+      }));
+      // Persist config
+      if (swagger) {
+        saveAutoAuthConfig(swagger.info.title, swagger.info.version || "1.0", config);
+      }
+      toast.success("Auto-authenticated successfully!");
+    },
+    [swagger]
+  );
+
+  const handleAutoAuthClear = useCallback(() => {
+    setAutoAuthState(INITIAL_AUTO_AUTH_STATE);
+    if (swagger) {
+      clearAutoAuthConfig(swagger.info.title, swagger.info.version || "1.0");
+    }
+  }, [swagger]);
+
   const handleFileLoaded = useCallback((doc: SwaggerDocument, name: string) => {
     setSwagger(doc);
     setFilename(name);
     const tags = analyzeTags(doc);
     setTagsInfo(tags);
     setSelectedTags(new Set());
-    // Reset API config when loading new file
+    // Reset API config and auto-auth when loading new file
     setApiConfig({ baseUrl: "", auth: { type: "none" } });
+    setAutoAuthState(INITIAL_AUTO_AUTH_STATE);
     toast.success(`Loaded ${name} - Found ${tags.size} tags`);
   }, []);
 
@@ -54,6 +175,7 @@ export function SwaggerExtractor() {
     setTagsInfo(new Map());
     setSelectedTags(new Set());
     setApiConfig({ baseUrl: "", auth: { type: "none" } });
+    setAutoAuthState(INITIAL_AUTO_AUTH_STATE);
   }, []);
 
   const extractionResult = useMemo<ExtractionResult | null>(() => {
@@ -119,7 +241,7 @@ export function SwaggerExtractor() {
                 </section>
                 <div className="pt-2 border-t text-xs text-muted-foreground">
                   <p><strong>Supported:</strong> OpenAPI 3.x, Swagger 2.0</p>
-                  <p><strong>Auth types:</strong> Bearer Token, API Key (header/query)</p>
+                  <p><strong>Auth types:</strong> Bearer Token, API Key (header/query), Auto Auth</p>
                 </div>
               </div>
             </DialogContent>
@@ -139,6 +261,10 @@ export function SwaggerExtractor() {
         swagger={swagger}
         config={apiConfig}
         onConfigChange={setApiConfig}
+        tagsInfo={tagsInfo}
+        autoAuthState={autoAuthState}
+        onAutoAuthComplete={handleAutoAuthComplete}
+        onAutoAuthClear={handleAutoAuthClear}
       />
 
       {/* Main content grid */}

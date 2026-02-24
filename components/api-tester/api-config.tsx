@@ -1,7 +1,8 @@
 "use client";
 
-import { Server } from "lucide-react";
+import { Server, ChevronDown, Info, LogIn, RefreshCw, X, Check, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,9 +18,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { SwaggerDocument, Server as ServerType, SecurityScheme } from "@/lib/types/swagger";
+import type { SwaggerDocument, TagInfo, Server as ServerType, SecurityScheme } from "@/lib/types/swagger";
 import { getServers, getSecuritySchemes } from "@/lib/swagger/parser";
 import {
   AuthType,
@@ -27,7 +27,8 @@ import {
   getAuthTypeLabel,
 } from "@/lib/api-testing/auth-builder";
 import { useMemo, useState, useEffect } from "react";
-import { Info } from "lucide-react";
+import { AutoAuthDialog } from "./auto-auth-dialog";
+import type { AutoAuthState, AutoAuthConfig } from "@/lib/api-testing/auto-auth";
 
 // Helper to convert swagger security scheme to our auth type
 interface DetectedAuth {
@@ -66,12 +67,25 @@ interface ApiConfigProps {
   swagger: SwaggerDocument;
   config: ApiConfigState;
   onConfigChange: (config: ApiConfigState) => void;
+  tagsInfo?: Map<string, TagInfo>;
+  autoAuthState?: AutoAuthState;
+  onAutoAuthComplete?: (accessToken: string, refreshToken: string | undefined, config: AutoAuthConfig) => void;
+  onAutoAuthClear?: () => void;
 }
 
-export function ApiConfig({ swagger, config, onConfigChange }: ApiConfigProps) {
+export function ApiConfig({
+  swagger,
+  config,
+  onConfigChange,
+  tagsInfo,
+  autoAuthState,
+  onAutoAuthComplete,
+  onAutoAuthClear,
+}: ApiConfigProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [useCustomUrl, setUseCustomUrl] = useState(false);
   const [customUrl, setCustomUrl] = useState("");
+  const [autoAuthOpen, setAutoAuthOpen] = useState(false);
 
   // Get servers from swagger
   const servers = useMemo(() => getServers(swagger), [swagger]);
@@ -167,6 +181,14 @@ export function ApiConfig({ swagger, config, onConfigChange }: ApiConfigProps) {
         auth = { type: "none" };
     }
     onConfigChange({ ...config, auth });
+  };
+
+  const handleAutoAuthComplete = (accessToken: string, refreshToken: string | undefined, autoConfig: AutoAuthConfig) => {
+    // Update bearer token
+    setBearerToken(accessToken);
+    updateAuthConfig("bearer", accessToken, apiKeyName, apiKeyValue);
+    // Notify parent
+    onAutoAuthComplete?.(accessToken, refreshToken, autoConfig);
   };
 
   const isConfigured = config.baseUrl && config.baseUrl.length > 0;
@@ -299,12 +321,93 @@ export function ApiConfig({ swagger, config, onConfigChange }: ApiConfigProps) {
 
               {/* Bearer token input */}
               {authType === "bearer" && (
-                <Input
-                  type="password"
-                  placeholder="Enter Bearer token..."
-                  value={bearerToken}
-                  onChange={(e) => handleBearerChange(e.target.value)}
-                />
+                <div className="space-y-2">
+                  {/* Auto Auth status */}
+                  {autoAuthState?.status === "authenticated" && autoAuthState.config && (
+                    <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5 space-y-2">
+                      <div className="flex items-center gap-2 text-xs">
+                        <Check className="h-3.5 w-3.5 text-emerald-500" />
+                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                          Auto-authenticated
+                        </span>
+                        <code className="bg-muted px-1 rounded text-muted-foreground">
+                          {autoAuthState.config.loginEndpoint.path}
+                        </code>
+                        {autoAuthState.obtainedAt && (
+                          <span className="text-muted-foreground ml-auto">
+                            {formatTimeAgo(autoAuthState.obtainedAt)}
+                          </span>
+                        )}
+                      </div>
+                      {autoAuthState.config.autoRefresh && autoAuthState.config.refreshEndpoint && (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <RefreshCw className="h-3 w-3" />
+                          Auto-refresh enabled
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs gap-1"
+                          onClick={() => onAutoAuthComplete && onAutoAuthComplete(
+                            autoAuthState.accessToken!,
+                            autoAuthState.refreshToken || undefined,
+                            autoAuthState.config!
+                          )}
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Re-authenticate
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs gap-1"
+                          onClick={() => setAutoAuthOpen(true)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs gap-1 text-red-600 dark:text-red-400"
+                          onClick={onAutoAuthClear}
+                        >
+                          <X className="h-3 w-3" />
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <Input
+                    type="password"
+                    placeholder="Enter Bearer token..."
+                    value={bearerToken}
+                    onChange={(e) => {
+                      handleBearerChange(e.target.value);
+                      // If user manually edits token, clear auto-auth status
+                      if (autoAuthState?.status === "authenticated" && onAutoAuthClear) {
+                        onAutoAuthClear();
+                      }
+                    }}
+                  />
+
+                  {/* TODO: Auto Auth button - hidden until wizard UX is refined
+                  {tagsInfo && tagsInfo.size > 0 && autoAuthState?.status !== "authenticated" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2 text-xs"
+                      onClick={() => setAutoAuthOpen(true)}
+                    >
+                      <LogIn className="h-3.5 w-3.5" />
+                      Auto Auth - Login with endpoint
+                    </Button>
+                  )}
+                  */}
+                </div>
               )}
 
               {/* API Key inputs */}
@@ -335,6 +438,27 @@ export function ApiConfig({ swagger, config, onConfigChange }: ApiConfigProps) {
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
+      {/* Auto Auth Dialog */}
+      {tagsInfo && (
+        <AutoAuthDialog
+          swagger={swagger}
+          tagsInfo={tagsInfo}
+          baseUrl={config.baseUrl}
+          open={autoAuthOpen}
+          onOpenChange={setAutoAuthOpen}
+          onAuthComplete={handleAutoAuthComplete}
+          existingConfig={autoAuthState?.config}
+        />
+      )}
     </Card>
   );
+}
+
+function formatTimeAgo(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
 }
