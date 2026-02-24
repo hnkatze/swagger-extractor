@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ArrowRightLeft, ArrowRight, Eye, Play, Copy, Check, Search, X } from "lucide-react";
+import { ChevronDown, ArrowRightLeft, ArrowRight, Eye, Play, Copy, Check, Search, X, Code2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,11 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
 import { getSchemas } from "@/lib/swagger/parser";
-import { simplifySchema } from "@/lib/swagger/schema-simplifier";
+import { resolveSchemaDeep } from "@/lib/swagger/schema-simplifier";
+import type { DeepSchemaField } from "@/lib/swagger/schema-simplifier";
 import { ApiTester } from "@/components/api-tester/api-tester";
 import type { ApiConfigState } from "@/components/api-tester/api-config";
+import { DtosDialog } from "@/components/swagger-extractor/dtos-dialog";
 
 interface EndpointsPreviewProps {
   tagsInfo: Map<string, TagInfo>;
@@ -50,16 +52,56 @@ function parseParam(param: string): { name: string; required: boolean; location:
   return { name, required, location };
 }
 
-// Get schema fields for display
-function getSchemaFields(
+// Get deeply resolved schema fields (with nested DTOs expanded)
+function getDeepSchemaFields(
   schemaName: string | undefined,
   allSchemas: Record<string, unknown>
-): Record<string, string> | null {
+): Record<string, DeepSchemaField> | null {
   if (!schemaName) return null;
-  const cleanName = schemaName.replace("[]", "");
-  const schema = allSchemas[cleanName];
-  if (!schema) return null;
-  return simplifySchema(schema as Record<string, unknown>, allSchemas as Record<string, Record<string, unknown>>);
+  return resolveSchemaDeep(
+    schemaName,
+    allSchemas as Record<string, Record<string, unknown>>
+  );
+}
+
+// Render deep schema fields recursively
+function DeepFieldsView({ fields, depth = 0 }: { fields: Record<string, DeepSchemaField>; depth?: number }) {
+  return (
+    <>
+      {Object.entries(fields).map(([key, field]) => (
+        <div key={key}>
+          <div style={{ paddingLeft: `${depth * 16}px` }}>
+            <span className="text-blue-600 dark:text-blue-400">{key}</span>
+            <span className="text-muted-foreground">: </span>
+            <span className={cn(
+              field.fields ? "text-amber-600 dark:text-amber-400 font-medium" : "text-emerald-600 dark:text-emerald-400"
+            )}>
+              {field.type}
+            </span>
+          </div>
+          {field.fields && (
+            <DeepFieldsView fields={field.fields} depth={depth + 1} />
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+// Convert deep fields to a flat JSON structure for copying
+function deepFieldsToJson(fields: Record<string, DeepSchemaField>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(fields)) {
+    if (field.fields) {
+      result[key] = {
+        _type: field.type,
+        ...deepFieldsToJson(field.fields),
+      };
+    } else {
+      result[key] = field.type;
+    }
+  }
+  return result;
 }
 
 // Collapsible text component for long summary/description
@@ -146,8 +188,15 @@ export function EndpointsPreview({
   const [copiedJson, setCopiedJson] = useState(false);
   const [copiedResponse, setCopiedResponse] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [dtosOpen, setDtosOpen] = useState(false);
+  const [dtosEndpoint, setDtosEndpoint] = useState<EndpointInfo | null>(null);
 
   const allSchemas = swagger ? getSchemas(swagger) : {};
+
+  const openDtos = (endpoint: EndpointInfo) => {
+    setDtosEndpoint(endpoint);
+    setDtosOpen(true);
+  };
 
   // Filter endpoints by search query
   const filterEndpoints = useMemo(() => {
@@ -203,8 +252,8 @@ export function EndpointsPreview({
 
   // Copy full endpoint JSON (for documentation)
   const copyEndpointJson = async (endpoint: EndpointInfo) => {
-    const bodyFields = endpoint.body ? getSchemaFields(endpoint.body, allSchemas) : null;
-    const responseFields = endpoint.response ? getSchemaFields(endpoint.response, allSchemas) : null;
+    const bodyDeep = endpoint.body ? getDeepSchemaFields(endpoint.body, allSchemas) : null;
+    const responseDeep = endpoint.response ? getDeepSchemaFields(endpoint.response, allSchemas) : null;
 
     const json = {
       method: endpoint.method,
@@ -212,8 +261,8 @@ export function EndpointsPreview({
       summary: endpoint.summary || undefined,
       description: endpoint.description || undefined,
       parameters: endpoint.params?.map(p => parseParam(p)) || undefined,
-      requestBody: bodyFields ? { schema: endpoint.body, fields: bodyFields, example: endpoint.bodyExample } : undefined,
-      response: responseFields ? { schema: endpoint.response, fields: responseFields } : undefined,
+      requestBody: bodyDeep ? { schema: endpoint.body, fields: deepFieldsToJson(bodyDeep), example: endpoint.bodyExample } : undefined,
+      response: responseDeep ? { schema: endpoint.response, fields: deepFieldsToJson(responseDeep) } : undefined,
     };
 
     try {
@@ -228,15 +277,15 @@ export function EndpointsPreview({
 
   // Copy response schema as JSON
   const copyResponseSchema = async (endpoint: EndpointInfo) => {
-    const responseFields = endpoint.response ? getSchemaFields(endpoint.response, allSchemas) : null;
-    if (!responseFields) {
+    const responseDeep = endpoint.response ? getDeepSchemaFields(endpoint.response, allSchemas) : null;
+    if (!responseDeep) {
       toast.error("No response schema available");
       return;
     }
 
     const json = {
       schema: endpoint.response,
-      fields: responseFields,
+      fields: deepFieldsToJson(responseDeep),
     };
 
     try {
@@ -412,6 +461,20 @@ export function EndpointsPreview({
                             >
                               <Play className="h-3.5 w-3.5" />
                             </Button>
+                            {(endpoint.body || endpoint.response) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 w-5 p-0 shrink-0 text-violet-600 hover:text-violet-700 dark:text-violet-400"
+                                title="Generate DTOs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openDtos(endpoint);
+                                }}
+                              >
+                                <Code2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
 
                           {/* Summary */}
@@ -458,7 +521,7 @@ export function EndpointsPreview({
       {/* Endpoint Detail Modal */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader>
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2 flex-wrap">
               {selectedEndpoint && (
                 <>
@@ -497,7 +560,7 @@ export function EndpointsPreview({
           </DialogHeader>
 
           {selectedEndpoint && (
-            <ScrollArea className="flex-1 pr-4">
+            <div className="overflow-y-auto min-h-0 pr-2">
               <div className="space-y-4">
                 {/* Summary & Description - Collapsible when long */}
                 {(selectedEndpoint.summary || selectedEndpoint.description) && (
@@ -558,18 +621,12 @@ export function EndpointsPreview({
                       </Badge>
                     </h4>
                     {(() => {
-                      const fields = getSchemaFields(selectedEndpoint.body, allSchemas);
-                      if (!fields) return <p className="text-xs text-muted-foreground">Schema not found</p>;
+                      const deepFields = getDeepSchemaFields(selectedEndpoint.body, allSchemas);
+                      if (!deepFields) return <p className="text-xs text-muted-foreground">Schema not found</p>;
                       return (
                         <div className="rounded-md border bg-muted/30 p-3">
                           <pre className="text-xs font-mono whitespace-pre-wrap">
-                            {Object.entries(fields).map(([key, value]) => (
-                              <div key={key}>
-                                <span className="text-blue-600 dark:text-blue-400">{key}</span>
-                                <span className="text-muted-foreground">: </span>
-                                <span className="text-emerald-600 dark:text-emerald-400">{value}</span>
-                              </div>
-                            ))}
+                            <DeepFieldsView fields={deepFields} />
                           </pre>
                         </div>
                       );
@@ -624,18 +681,12 @@ export function EndpointsPreview({
                       </Button>
                     </h4>
                     {(() => {
-                      const fields = getSchemaFields(selectedEndpoint.response, allSchemas);
-                      if (!fields) return <p className="text-xs text-muted-foreground">Schema not found</p>;
+                      const deepFields = getDeepSchemaFields(selectedEndpoint.response, allSchemas);
+                      if (!deepFields) return <p className="text-xs text-muted-foreground">Schema not found</p>;
                       return (
                         <div className="rounded-md border bg-muted/30 p-3">
                           <pre className="text-xs font-mono whitespace-pre-wrap">
-                            {Object.entries(fields).map(([key, value]) => (
-                              <div key={key}>
-                                <span className="text-blue-600 dark:text-blue-400">{key}</span>
-                                <span className="text-muted-foreground">: </span>
-                                <span className="text-emerald-600 dark:text-emerald-400">{value}</span>
-                              </div>
-                            ))}
+                            <DeepFieldsView fields={deepFields} />
                           </pre>
                         </div>
                       );
@@ -650,7 +701,7 @@ export function EndpointsPreview({
                   </p>
                 )}
               </div>
-            </ScrollArea>
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -662,6 +713,16 @@ export function EndpointsPreview({
         open={testerOpen}
         onOpenChange={setTesterOpen}
       />
+
+      {/* DTOs Generator Modal */}
+      {swagger && dtosEndpoint && (
+        <DtosDialog
+          open={dtosOpen}
+          onOpenChange={setDtosOpen}
+          swagger={swagger}
+          endpoint={dtosEndpoint}
+        />
+      )}
     </Card>
   );
 }
