@@ -19,7 +19,11 @@ import { ExportPanel } from "./export-panel";
 import { ApiConfig, ApiConfigState } from "@/components/api-tester/api-config";
 import { analyzeTags } from "@/lib/swagger/analyzer";
 import { extractByTags } from "@/lib/swagger/extractor";
-import type { SwaggerDocument, TagInfo, ExtractionResult } from "@/lib/types/swagger";
+import type { SwaggerDocument, TagInfo, ExtractionResult, EndpointInfo } from "@/lib/types/swagger";
+import { findAllSchemaRefs } from "@/lib/swagger/schema-resolver";
+import { getSchemas } from "@/lib/swagger/parser";
+import { simplifySchema } from "@/lib/swagger/schema-simplifier";
+import type { SchemaObject } from "@/lib/types/swagger";
 import {
   type AutoAuthState,
   type AutoAuthConfig,
@@ -38,6 +42,7 @@ export function SwaggerExtractor() {
   const [filename, setFilename] = useState<string>("");
   const [tagsInfo, setTagsInfo] = useState<Map<string, TagInfo>>(new Map());
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const [endpointSearch, setEndpointSearch] = useState("");
 
   // API testing configuration (global)
   const [apiConfig, setApiConfig] = useState<ApiConfigState>({
@@ -159,6 +164,7 @@ export function SwaggerExtractor() {
     const tags = analyzeTags(doc);
     setTagsInfo(tags);
     setSelectedTags(new Set());
+    setEndpointSearch("");
     // Reset API config and auto-auth when loading new file
     setApiConfig({ baseUrl: "", auth: { type: "none" } });
     setAutoAuthState(INITIAL_AUTO_AUTH_STATE);
@@ -174,6 +180,7 @@ export function SwaggerExtractor() {
     setFilename("");
     setTagsInfo(new Map());
     setSelectedTags(new Set());
+    setEndpointSearch("");
     setApiConfig({ baseUrl: "", auth: { type: "none" } });
     setAutoAuthState(INITIAL_AUTO_AUTH_STATE);
   }, []);
@@ -182,6 +189,71 @@ export function SwaggerExtractor() {
     if (!swagger || selectedTags.size === 0) return null;
     return extractByTags(swagger, Array.from(selectedTags), tagsInfo);
   }, [swagger, selectedTags, tagsInfo]);
+
+  // Filter extraction result by endpoint search query (endpoints + schemas)
+  const filteredResult = useMemo<ExtractionResult | null>(() => {
+    if (!extractionResult || !swagger) return null;
+    const query = endpointSearch.trim().toLowerCase();
+    if (!query) return extractionResult;
+
+    const filteredEndpoints: Record<string, EndpointInfo[]> = {};
+    const filteredTags: string[] = [];
+
+    for (const [tag, endpoints] of Object.entries(extractionResult.endpoints)) {
+      const matched = endpoints.filter(
+        (ep) =>
+          ep.path.toLowerCase().includes(query) ||
+          ep.method.toLowerCase().includes(query) ||
+          ep.summary?.toLowerCase().includes(query) ||
+          ep.description?.toLowerCase().includes(query)
+      );
+      if (matched.length > 0) {
+        filteredEndpoints[tag] = matched;
+        filteredTags.push(tag);
+      }
+    }
+
+    // Recalculate schemas from filtered endpoints only
+    const allSchemas = getSchemas(swagger) as Record<string, SchemaObject>;
+    const usedSchemas = new Set<string>();
+
+    for (const endpoints of Object.values(filteredEndpoints)) {
+      for (const ep of endpoints) {
+        if (ep.body) usedSchemas.add(ep.body.replace("[]", ""));
+        if (ep.response) usedSchemas.add(ep.response.replace("[]", ""));
+      }
+    }
+
+    // Resolve nested schema dependencies
+    const schemasToProcess = Array.from(usedSchemas);
+    while (schemasToProcess.length > 0) {
+      const schemaName = schemasToProcess.pop()!;
+      if (allSchemas[schemaName]) {
+        const nestedRefs = findAllSchemaRefs(allSchemas[schemaName]);
+        for (const ref of nestedRefs) {
+          if (!usedSchemas.has(ref)) {
+            usedSchemas.add(ref);
+            schemasToProcess.push(ref);
+          }
+        }
+      }
+    }
+
+    // Build filtered schemas
+    const filteredSchemas: Record<string, Record<string, string>> = {};
+    for (const schemaName of Array.from(usedSchemas).sort()) {
+      if (allSchemas[schemaName]) {
+        filteredSchemas[schemaName] = simplifySchema(allSchemas[schemaName], allSchemas);
+      }
+    }
+
+    return {
+      ...extractionResult,
+      extracted_tags: filteredTags,
+      endpoints: filteredEndpoints,
+      schemas: filteredSchemas,
+    };
+  }, [extractionResult, endpointSearch, swagger]);
 
   // Initial state - show file upload
   if (!swagger) {
@@ -285,8 +357,10 @@ export function SwaggerExtractor() {
             selectedTags={selectedTags}
             swagger={swagger}
             apiConfig={apiConfig}
+            searchQuery={endpointSearch}
+            onSearchChange={setEndpointSearch}
           />
-          <ExportPanel result={extractionResult} />
+          <ExportPanel result={filteredResult} />
         </div>
       </div>
     </div>

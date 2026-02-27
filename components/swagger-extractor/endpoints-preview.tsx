@@ -33,6 +33,8 @@ interface EndpointsPreviewProps {
   selectedTags: Set<string>;
   swagger?: SwaggerDocument | null;
   apiConfig?: ApiConfigState;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
 }
 
 const METHOD_COLORS: Record<string, string> = {
@@ -178,6 +180,8 @@ export function EndpointsPreview({
   selectedTags,
   swagger,
   apiConfig,
+  searchQuery,
+  onSearchChange,
 }: EndpointsPreviewProps) {
   const [openTags, setOpenTags] = useState<Set<string>>(new Set(selectedTags));
   const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointInfo | null>(null);
@@ -187,7 +191,6 @@ export function EndpointsPreview({
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [copiedJson, setCopiedJson] = useState(false);
   const [copiedResponse, setCopiedResponse] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [dtosOpen, setDtosOpen] = useState(false);
   const [dtosEndpoint, setDtosEndpoint] = useState<EndpointInfo | null>(null);
 
@@ -353,13 +356,13 @@ export function EndpointsPreview({
           <Input
             placeholder="Search endpoints..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9 pr-9"
           />
           {searchQuery && (
             <button
               type="button"
-              onClick={() => setSearchQuery("")}
+              onClick={() => onSearchChange("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               <X className="h-4 w-4" />
